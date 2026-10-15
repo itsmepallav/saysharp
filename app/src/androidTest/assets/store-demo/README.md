@@ -1,0 +1,1 @@
+Synthetic spoken examples for isolated store screenshot captures. Generated with macOS say; not user recordings, testimonials, or evidence of improvement. Never shipped in the production APK. The capture uses an in-memory store and never opens the microphone.

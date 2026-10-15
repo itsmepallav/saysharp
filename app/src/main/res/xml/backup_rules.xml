@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+   Exclude practice from legacy Android backups.
+   See https://developer.android.com/guide/topics/data/autobackup
+   for details.
+   Android 12 and newer also use data_extraction_rules.xml.
+   See https://developer.android.com/about/versions/12/backup-restore
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

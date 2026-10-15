@@ -1,0 +1,35 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+.kotlin/
+
+# Local Firebase configuration and signing material
+app/google-services.json
+**/google-services.json
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+.env
+.env.*
+*.pem
+*.p12
+
+# Generated release packages and duplicate distribution archives
+**/release/
+*.apk
+*.aab
+*.zip
