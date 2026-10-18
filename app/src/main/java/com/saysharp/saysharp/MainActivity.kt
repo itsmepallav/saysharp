@@ -13,16 +13,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import com.saysharp.saysharp.audio.AndroidAudioRecorder
-import com.saysharp.saysharp.storage.AndroidSessionStore
 import com.saysharp.shared.practice.PracticeController
 import com.saysharp.shared.ui.SaySharpApp
 import com.saysharp.shared.reminder.ReminderController
 import com.saysharp.saysharp.reminder.AndroidReminders
-import com.saysharp.shared.engagement.EngagementController
-import com.saysharp.saysharp.storage.AndroidEngagementStore
 
 class MainActivity : ComponentActivity() {
+    private val microphone by lazy { com.saysharp.shared.platform.android.AndroidMicrophonePermission(this) }
+    private var requestedStage: com.saysharp.shared.practice.PracticeStage? = null
+    private var recordingRequestPending = false
+    private lateinit var dependencies: AndroidAppDependencies
     private lateinit var controller: PracticeController
     private lateinit var reminders: ReminderController
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
@@ -34,7 +34,11 @@ class MainActivity : ComponentActivity() {
     private val microphonePermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         telemetry.track("permission_result", "permission" to "microphone", "granted" to granted)
         if (::controller.isInitialized) {
-            if (granted) controller.startRecording() else controller.permissionDenied()
+            val expected = requestedStage
+            recordingRequestPending = false
+            requestedStage = null
+            if (granted && expected == controller.session.stage && lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) controller.startRecording()
+            else if (!granted) controller.permissionDenied()
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,17 +47,26 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(0xFFF6F5F0.toInt(), 0xFFF6F5F0.toInt()),
         )
-        controller = PracticeController(AndroidAudioRecorder(this), AndroidSessionStore(noBackupFilesDir), telemetry)
-        reminders = ReminderController(AndroidReminders(this, diagnostics = telemetry), telemetry)
-        val engagement = EngagementController(AndroidEngagementStore(noBackupFilesDir), telemetry)
+        dependencies = AndroidAppDependencies(this, telemetry)
+        controller = dependencies.practice
+        reminders = dependencies.reminders
+        val engagement = dependencies.engagement
         trackReminderOpen(intent)
         setContent {
             SaySharpApp(controller, onRequestRecording = {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                if (microphone.granted()) {
                     controller.startRecording()
+                } else if (microphone.requiresSettings()) {
+                    controller.permissionDenied()
+                    microphone.openSettings()
                 } else {
-                    telemetry.track("permission_requested", "permission" to "microphone")
-                    microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    if (!recordingRequestPending) {
+                        recordingRequestPending = true
+                        requestedStage = controller.session.stage
+                        telemetry.track("permission_requested", "permission" to "microphone")
+                        microphone.markRequested()
+                        microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 }
             }, reminders = reminders, onRequestReminder = {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this,
@@ -76,10 +89,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        requestedStage = null
         if (::controller.isInitialized) telemetry.track("app_backgrounded", "day" to controller.session.day,
             "stage" to controller.session.stage.name, "was_recording" to controller.isRecording)
         if (::controller.isInitialized) controller.onBackground()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        if (::dependencies.isInitialized) dependencies.close()
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {

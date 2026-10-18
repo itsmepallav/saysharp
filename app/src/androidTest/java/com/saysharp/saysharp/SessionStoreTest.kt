@@ -30,6 +30,8 @@ class SessionStoreTest {
                 day = 4,
                 recallAssessment = SelfAssessment.NotYet,
                 recallHintUsed = true,
+                recordingInProgress = true,
+                listenedRecordingIds = setOf("sample.m4a"),
                 completedDays = mapOf(1 to DayReview(realLifeWin = "First day"), 2 to DayReview(vocabularyAssessment = SelfAssessment.Unsure)),
             )
             store.save(snapshot)
@@ -40,6 +42,43 @@ class SessionStoreTest {
             dir.listFiles()?.forEach { it.delete() }
             dir.delete()
         }
+    }
+
+    @Test fun allLessonIdsAndRecordingContextsSurviveLocalRoundTrip() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = File(context.cacheDir, "curriculum-storage-${UUID.randomUUID()}")
+        try {
+            val store = AndroidSessionStore(dir)
+            for (day in 1..14) {
+                val definition = com.saysharp.shared.session.BundledSessionRepository.definition(day)
+                val slot = if (definition.isCheckpoint) RecordingSlot.CheckpointFresh else RecordingSlot.First
+                val ref = RecordingRef("lesson-$day.m4a", 35000)
+                val snapshot = PracticeSession(day = day, stage = definition.stages.first(),
+                    recordings = mapOf(slot to ref),
+                    completedDays = (1 until day).associateWith { previous ->
+                        DayReview(recordings = mapOf(RecordingSlot.First to RecordingRef("previous-$previous.m4a", 35000)))
+                    })
+                store.save(snapshot)
+                val restored = AndroidSessionStore(dir).load()
+                assertEquals(snapshot, restored)
+                assertEquals(definition.id, restored.lessonId)
+                assertEquals(definition, com.saysharp.shared.session.BundledSessionRepository.definition(restored.lessonId))
+                assertEquals(ref, restored.recordings.getValue(slot))
+            }
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test fun unfinishedAtomicMetadataWriteRestoresPreviousCommittedSession() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = File(context.cacheDir, "atomic-recovery-${UUID.randomUUID()}")
+        try {
+            val saved = PracticeSession(stage = PracticeStage.Retry, firstAssessment = SelfAssessment.Unsure,
+                recordings = mapOf(RecordingSlot.First to RecordingRef("kept.m4a",35000)))
+            AndroidSessionStore(dir).save(saved)
+            val atomic = android.util.AtomicFile(File(dir,"practice-session.json"))
+            atomic.startWrite().use { it.write("unfinished JSON".toByteArray()) }
+            assertEquals(saved,AndroidSessionStore(dir).load())
+        } finally { dir.deleteRecursively() }
     }
 
     @Test fun versionOneDataCanBeReadAndResavedWithoutLosingAudioIds() {

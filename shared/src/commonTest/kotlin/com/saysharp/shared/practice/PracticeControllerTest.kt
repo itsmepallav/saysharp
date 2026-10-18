@@ -1,7 +1,7 @@
 package com.saysharp.shared.practice
 
 import com.saysharp.shared.lesson.SelfAssessment
-import com.saysharp.shared.platform.AudioRecorder
+import com.saysharp.shared.platform.PracticeAudio
 import com.saysharp.shared.platform.RecordingRef
 import kotlin.test.*
 
@@ -15,36 +15,38 @@ class PracticeControllerTest {
         c.stopRecording()
     }
 
-    @Test fun completeSessionAllowsNotYetAndUnsureWithoutChangingBaseline() {
+    @Test fun completeSessionAllowsNotYetAndUnsureWithThreeIndependentAttempts() {
         val c = controller()
-        c.advance()
-        record(c)
-        val baseline = c.session.recordings[RecordingSlot.Baseline]
-        c.advance(); c.advance()
-        record(c); c.advance()
-        c.assess(SelfAssessment.NotYet); c.advance()
-        record(c); c.advance()
-        c.assess(SelfAssessment.Unsure, retry = true)
-        c.compare(Comparison.LessClear); c.advance()
+        c.advance(); record(c)
+        val first = c.session.recordings.getValue(RecordingSlot.First)
+        c.advance(); c.play(first, true); audio.finished!!()
+        c.assess(SelfAssessment.Unsure); c.advance()
+        assertEquals(PracticeStage.Lesson, c.session.stage)
+        c.advance(); record(c); c.advance(); c.advance()
         assertEquals(PracticeStage.Apply, c.session.stage)
         record(c); c.advance()
-        assertEquals(PracticeStage.Summary, c.session.stage)
-        c.advance()
         assertEquals(PracticeStage.Complete, c.session.stage)
         c.startRecording()
         assertFalse(c.isRecording)
-        assertEquals(baseline, c.session.recordings[RecordingSlot.Baseline])
-        assertEquals(4, c.session.recordings.size)
+        assertEquals(first, c.session.recordings[RecordingSlot.First])
+        assertEquals(3, c.session.recordings.size)
         assertEquals(c.session, store.saved)
+        assertEquals(c.session, controller().session)
     }
 
-    @Test fun cannotSkipRequiredRecordingOrAssessment() {
+    @Test fun cannotSkipRecordingListeningOrSelfCheck() {
         val c = controller()
         c.advance(); c.advance()
-        assertEquals(PracticeStage.Baseline, c.session.stage)
-        record(c); c.advance(); c.advance(); record(c); c.advance()
+        assertEquals(PracticeStage.FirstAttempt, c.session.stage)
+        record(c); c.advance()
+        c.assess(SelfAssessment.Done); c.advance()
+        assertNull(c.session.firstAssessment)
+        assertEquals(PracticeStage.FirstCheck, c.session.stage)
+        c.play(c.session.recordings.getValue(RecordingSlot.First), true); audio.finished!!()
         c.advance()
         assertEquals(PracticeStage.FirstCheck, c.session.stage)
+        c.assess(SelfAssessment.NotYet); c.advance()
+        assertEquals(PracticeStage.Lesson, c.session.stage)
     }
 
     @Test fun elapsedTimeUsesClockAndStopsAtLimit() {
@@ -55,9 +57,9 @@ class PracticeControllerTest {
         c.tick()
         assertFalse(c.isRecording)
         assertEquals(60_000L, c.elapsedMillis)
-        c.advance(); c.advance(); c.startRecording()
-        assertEquals(45_000L, audio.limit)
-        audio.now += 45_100
+        c.startRecording()
+        assertEquals(60_000L, audio.limit)
+        audio.now += 60_100
         c.tick()
         assertFalse(c.isRecording)
         assertNotNull(c.session.recordings[RecordingSlot.First])
@@ -66,10 +68,10 @@ class PracticeControllerTest {
     @Test fun failedReplacementPreservesEarlierAttempt() {
         val c = controller()
         c.advance(); record(c)
-        val original = c.session.recordings[RecordingSlot.Baseline]
+        val original = c.session.recordings[RecordingSlot.First]
         store.failSave = true
         record(c)
-        assertEquals(original, c.session.recordings[RecordingSlot.Baseline])
+        assertEquals(original, c.session.recordings[RecordingSlot.First])
         assertTrue(original in audio.files)
         assertEquals(1, audio.files.size)
         assertNotNull(c.message)
@@ -78,9 +80,9 @@ class PracticeControllerTest {
     @Test fun tooShortReplacementPreservesEarlierAttempt() {
         val c = controller()
         c.advance(); record(c)
-        val original = c.session.recordings[RecordingSlot.Baseline]
+        val original = c.session.recordings[RecordingSlot.First]
         record(c, 200)
-        assertEquals(original, c.session.recordings[RecordingSlot.Baseline])
+        assertEquals(original, c.session.recordings[RecordingSlot.First])
         assertEquals(1, audio.files.size)
         assertNotNull(c.message)
     }
@@ -89,7 +91,7 @@ class PracticeControllerTest {
         val c = controller()
         c.advance(); c.startRecording(); c.onBackground()
         assertFalse(c.isRecording)
-        assertNotNull(c.session.recordings[RecordingSlot.Baseline])
+        assertNotNull(c.session.recordings[RecordingSlot.First])
         assertEquals(c.session, controller().session)
         assertTrue(c.message!!.contains("left the app"))
     }
@@ -113,22 +115,21 @@ class PracticeControllerTest {
 
     @Test fun missingFileReopensAffectedRecordingStep() {
         val c = controller()
-        c.advance(); record(c); c.advance(); c.advance(); record(c); c.advance()
+        c.advance(); record(c); c.advance()
         audio.files.remove(c.session.recordings[RecordingSlot.First])
         val restored = controller()
         assertEquals(PracticeStage.FirstAttempt, restored.session.stage)
-        assertNotNull(restored.session.recordings[RecordingSlot.Baseline])
         assertNull(restored.session.recordings[RecordingSlot.First])
     }
 
     @Test fun audioInterruptionDoesNotReplaceSavedAttempt() {
         val c = controller()
         c.advance(); record(c)
-        val original = c.session.recordings[RecordingSlot.Baseline]
+        val original = c.session.recordings[RecordingSlot.First]
         c.startRecording()
         audio.onError!!()
         assertFalse(c.isRecording)
-        assertEquals(original, c.session.recordings[RecordingSlot.Baseline])
+        assertEquals(original, c.session.recordings[RecordingSlot.First])
         assertNotNull(c.message)
     }
 
@@ -154,7 +155,7 @@ class PracticeControllerTest {
     @Test fun playbackEndsAndStopsWhenAppLeavesForeground() {
         val c = controller()
         c.advance(); record(c)
-        val ref = c.session.recordings.getValue(RecordingSlot.Baseline)
+        val ref = c.session.recordings.getValue(RecordingSlot.First)
         c.play(ref, openingOnly = true)
         assertEquals(ref.id, c.playingId)
         audio.finished!!()
@@ -179,8 +180,15 @@ class PracticeControllerTest {
                 when (stage) {
                     PracticeStage.Baseline, PracticeStage.FirstAttempt, PracticeStage.Retry, PracticeStage.Apply,
                     PracticeStage.CheckpointRepeat, PracticeStage.CheckpointFresh -> record(c)
-                    PracticeStage.FirstCheck -> c.assess(SelfAssessment.NotYet)
+                    PracticeStage.FirstCheck -> {
+                        c.play(c.session.recordings.getValue(RecordingSlot.First), true); audio.finished!!()
+                        c.assess(SelfAssessment.NotYet)
+                    }
                     PracticeStage.Compare, PracticeStage.CheckpointCompare -> {
+                        if (stage == PracticeStage.CheckpointCompare) {
+                            c.play(c.session.recordings.getValue(RecordingSlot.CheckpointRepeat)); audio.finished!!()
+                            c.play(c.session.recordings.getValue(RecordingSlot.CheckpointFresh)); audio.finished!!()
+                        }
                         c.assess(SelfAssessment.Unsure, retry = true)
                         c.compare(Comparison.AboutTheSame)
                     }
@@ -202,25 +210,25 @@ class PracticeControllerTest {
                 assertFalse(PracticeStage.Lesson in stages)
                 assertFalse(PracticeStage.Retry in stages)
             }
-            assertTrue(c.beginNextDay())
+            assertEquals(day < 14, c.beginNextDay())
         }
         assertEquals(14, c.session.day)
         assertEquals(PracticeStage.Complete, c.session.stage)
-        assertEquals(50, audio.files.size)
+        assertEquals(40, audio.files.size)
         assertTrue(c.session.completedDays.values.flatMap { it.recordings.values }.all { it in audio.files })
         assertEquals(c.session, controller().session)
     }
 
-    @Test fun completedDayOneFromOldInstallIsArchivedBeforeMovingOn() {
+    @Test fun completedDayHistoryIsPreservedBeforeMovingOn() {
         val c = controller()
         c.advance(); record(c)
-        val old = c.session.copy(stage = PracticeStage.Complete, realLifeWin = "Original note", completedDays = emptyMap())
+        val old = c.session.copy(stage = PracticeStage.Complete, realLifeWin = "Original note", completedDays = mapOf(1 to c.session.review().copy(realLifeWin = "Original note")))
         store.saved = old
         val upgraded = controller()
         assertEquals("Original note", upgraded.session.completedDays.getValue(1).realLifeWin)
         assertTrue(upgraded.beginNextDay())
         assertEquals(2, upgraded.session.day)
-        assertEquals(old.recordings[RecordingSlot.Baseline], upgraded.baseline())
+        assertEquals(old.recordings[RecordingSlot.First], upgraded.baseline())
         assertEquals("Original note", store.saved.completedDays.getValue(1).realLifeWin)
     }
 
@@ -243,13 +251,14 @@ class PracticeControllerTest {
         assertFalse(c.saveWin("Not completed", day = 10))
     }
 
-    @Test fun hintUsePersistsAndUnsureDoesNotBlockRecall() {
-        store.saved = PracticeSession(day = 4, stage = PracticeStage.Recall)
+    @Test fun unsurePersistsAndAllowsTheConcisionCorrectionAfterReplay() {
+        store.saved = PracticeSession(day = 4, stage = PracticeStage.FirstAttempt)
         val c = controller()
-        c.revealRecall(); record(c)
-        c.assessVocabulary(SelfAssessment.Unsure)
+        record(c); c.advance()
+        c.play(c.session.recordings.getValue(RecordingSlot.First)); audio.finished!!()
+        c.assess(SelfAssessment.Unsure)
         val restored = controller()
-        assertTrue(restored.session.recallHintUsed)
+        assertEquals(SelfAssessment.Unsure, restored.session.firstAssessment)
         restored.advance()
         assertEquals(PracticeStage.Lesson, restored.session.stage)
     }
@@ -274,7 +283,7 @@ private class MemoryStore : SessionStore {
     override fun save(session: PracticeSession) { check(!failSave); saves++; saved = session }
 }
 
-private class FakeAudio : AudioRecorder {
+private class FakeAudio : PracticeAudio {
     var now = 0L
     var duration = 2_000L
     var limit = 0L

@@ -3,7 +3,7 @@ package com.saysharp.saysharp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.saysharp.shared.platform.AudioRecorder
+import com.saysharp.shared.platform.PracticeAudio
 import com.saysharp.shared.platform.RecordingRef
 import com.saysharp.shared.practice.PracticeController
 import com.saysharp.shared.practice.PracticeSession
@@ -73,7 +73,7 @@ private class ScreenReminders : ReminderPlatform {
     override fun sendPreview() { previews++ }
 }
 
-private class NoAudio : AudioRecorder {
+private class NoAudio : PracticeAudio {
     override fun start(limitMillis: Long, onLimit: () -> Unit, onError: () -> Unit) = error("Not used")
     override fun stop(): RecordingRef = error("Not used")
     override fun cancel() {}

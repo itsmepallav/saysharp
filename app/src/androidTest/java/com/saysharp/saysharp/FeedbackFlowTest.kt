@@ -90,7 +90,7 @@ private class FeedbackTestBackend : TelemetryBackend {
     override fun error(operation: String, error: Throwable?) {}
 }
 
-private class FeedbackTestAudio : AudioRecorder {
+private class FeedbackTestAudio : PracticeAudio {
     override fun start(limitMillis: Long, onLimit: () -> Unit, onError: () -> Unit) = error("Not used")
     override fun stop(): RecordingRef = error("Not used")
     override fun cancel() {}

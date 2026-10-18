@@ -18,11 +18,11 @@ class AndroidEngagementStore(directory: File) : EngagementStore {
         val acknowledgements = json.getJSONArray("acknowledged")
         val acknowledged = (0 until acknowledgements.length()).map { acknowledgements.getInt(it) }.toSet()
         require(acknowledged.all { value -> Milestones.any { it.sessions == value } })
-        return EngagementState(json.getBoolean("welcomed"), SpeakingGoal.valueOf(json.getString("goal")), acknowledged)
+        return EngagementState(json.getBoolean("onboardingCompleted"), SpeakingGoal.valueOf(json.getString("goal")), acknowledged)
     }
 
     override fun save(state: EngagementState) {
-        val bytes = JSONObject().put("version", 1).put("welcomed", state.welcomed)
+        val bytes = JSONObject().put("version", 1).put("onboardingCompleted", state.onboardingCompleted)
             .put("goal", state.goal.name).put("acknowledged", JSONArray(state.acknowledged.sorted()))
             .toString().toByteArray(Charsets.UTF_8)
         val stream = file.startWrite()

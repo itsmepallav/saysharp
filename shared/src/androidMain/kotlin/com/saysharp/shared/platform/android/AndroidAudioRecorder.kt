@@ -1,4 +1,4 @@
-package com.saysharp.saysharp.audio
+package com.saysharp.shared.platform.android
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -12,14 +12,17 @@ import android.os.Handler
 import android.os.Looper
 import android.os.StatFs
 import android.os.SystemClock
-import com.saysharp.shared.platform.AudioRecorder
+import com.saysharp.shared.platform.PracticeAudio
 import com.saysharp.shared.platform.RecordingRef
 import java.io.File
 import java.util.UUID
 
 /** Activity-scoped, foreground-only audio. All access and callbacks use the main thread. */
-class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
+class AndroidAudioRecorder(private val context: Context) : PracticeAudio {
     private val directory = File(context.noBackupFilesDir, "recordings").apply { mkdirs() }
+    private val journal = RecordingJournal(directory)
+    override fun pendingRecording() = journal.read()
+    override fun acknowledgeRecording(recording: RecordingRef) = journal.acknowledge(recording)
     private val handler = Handler(Looper.getMainLooper())
     private val manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var recorder: MediaRecorder? = null
@@ -73,6 +76,7 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
         val file = checkNotNull(output)
         recorder = null
         output = null
+        var finalized = false
         try {
             try { current.stop() } finally { current.release(); abandonFocus() }
             check(file.length() > 0)
@@ -81,9 +85,14 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
                 metadata.setDataSource(file.absolutePath)
                 checkNotNull(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull())
             } finally { metadata.release() }
-            return RecordingRef(file.name, duration)
+            finalized = true
+            // Finalized AAC is durable before the recovery marker and progress reference.
+            java.io.RandomAccessFile(file, "rw").use { it.fd.sync() }
+            val ref = RecordingRef(file.name, duration)
+            journal.write(ref)
+            return ref
         } catch (error: Exception) {
-            file.delete()
+            if (!finalized) file.delete()
             throw error
         }
     }
@@ -107,7 +116,7 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
         player = next
         try {
             acquireFocus {
-                if (player === next) { stopPlayback(); onFinished() }
+                if (player === next) { stopPlayback(); onError() }
             }
             next.setAudioAttributes(speech)
             next.setDataSource(file.absolutePath)
@@ -146,7 +155,7 @@ class AndroidAudioRecorder(private val context: Context) : AudioRecorder {
         if (recorder == null) abandonFocus()
     }
 
-    override fun exists(recording: RecordingRef): Boolean = runCatching { fileFor(recording).isFile }.getOrDefault(false)
+    override fun exists(recording: RecordingRef): Boolean = runCatching { fileFor(recording).let { it.isFile && it.length() > 0 } }.getOrDefault(false)
     override fun delete(recording: RecordingRef) {
         val file = fileFor(recording)
         check(!file.exists() || file.delete()) { "Could not delete recording" }

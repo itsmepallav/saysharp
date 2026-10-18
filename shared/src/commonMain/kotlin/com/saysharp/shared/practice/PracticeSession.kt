@@ -19,7 +19,11 @@ data class PracticeSession(
     val recallAssessment: SelfAssessment? = null,
     val recallHintUsed: Boolean = false,
     val completedDays: Map<Int, DayReview> = emptyMap(),
-)
+    val recordingInProgress: Boolean = false,
+    val listenedRecordingIds: Set<String> = emptySet(),
+) {
+    val lessonId: String get() = com.saysharp.shared.session.lessonId(day)
+}
 
 data class DayReview(
     val recordings: Map<RecordingSlot, RecordingRef> = emptyMap(),
@@ -35,11 +39,8 @@ data class DayReview(
 fun PracticeSession.review() = DayReview(recordings - RecordingSlot.Baseline, firstAssessment, retryAssessment,
     comparison, realLifeWin, vocabularyAssessment, recallAssessment, recallHintUsed)
 
-interface SessionStore {
-    fun load(): PracticeSession
-    /** Must save atomically, or throw without discarding the last saved session. */
-    fun save(session: PracticeSession)
-}
+/** Compatibility boundary for existing Android JSON storage and test stores. */
+interface SessionStore : com.saysharp.shared.session.ProgressRepository
 
 fun PracticeStage.recordingSlot(): RecordingSlot? = when (this) {
     PracticeStage.Baseline -> RecordingSlot.Baseline

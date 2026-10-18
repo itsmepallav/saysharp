@@ -1,93 +1,96 @@
 package com.saysharp.shared.ui
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.saysharp.shared.lesson.Programme
-import com.saysharp.shared.practice.*
-import com.saysharp.shared.engagement.SpeakingGoal
+import com.saysharp.shared.programme.*
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun TodayScreen(controller: PracticeController, onOpen: () -> Unit, goal: SpeakingGoal? = null) = Page {
-    val day = controller.nextDay
-    val outline = Programme.outline[day - 1]
+internal fun TodayScreen(onOpen: () -> Unit, onReview: () -> Unit) = Page {
+    val programme = LocalSessionState.current.programme
     Eyebrow("Think Sharp. Speak Bold.")
-    Text(if (controller.session.completedDays.size == 14) "Your programme,\nready to revisit." else "One clearer\nanswer today.", style = MaterialTheme.typography.headlineLarge)
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Eyebrow("Your journey")
-            Text("${controller.session.completedDays.size} / 14", style = MaterialTheme.typography.labelLarge, color = Muted)
-        }
-        ProgressTrack(controller.session.completedDays.size)
+    if (programme.isComplete) {
+        Text("Programme complete", Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
+        Text("You've completed all 14 lessons. Listen back to your saved answers and notice what has changed.")
+        ProgrammeProgress(programme)
+        PrimaryAction("Review my practice", onReview)
+    } else {
+        val lesson = requireNotNull(programme.currentLesson)
+        Text("Day ${lesson.day} of 14", style = MaterialTheme.typography.titleMedium, color = Forest)
+        Eyebrow(lesson.phase.title)
+        Text(lesson.title, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
+        Text(lesson.explanation, style = MaterialTheme.typography.bodyLarge)
+        PrimaryAction(if (programme.action == TodayAction.Resume) "Resume practice" else "Start today's practice", onOpen)
+        ProgrammeProgress(programme)
     }
-    Panel {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Surface(color = Sage, shape = CircleShape) { Text("DAY ${day.toString().padStart(2, '0')}", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = Forest) }
-                Box(Modifier.weight(1f).padding(start = 12.dp), contentAlignment = Alignment.CenterEnd) {
-                    Eyebrow(if (Programme.checkpoint(day) != null) "Hear your change" else "Your next win", Clay)
-                }
-            }
-            Text(outline.title, style = MaterialTheme.typography.headlineMedium)
-            QuietText(Programme.checkpoint(day)?.let { "Answer a familiar question and a fresh one. Listen for what changed." } ?: Programme.lesson(day).instruction)
-            PrimaryAction(when (controller.session.stage) {
-                    PracticeStage.Welcome -> "Start practice"
-                    PracticeStage.Complete -> if (controller.session.day < 14) "Start Day $day" else "Review your programme"
-                    else -> "Continue practice"
-                }, onOpen)
-    }
-    val latest = controller.session.completedDays.maxByOrNull { it.key }?.value
-    if (latest?.comparison == Comparison.Clearer) Panel(color = Sage) {
-        Eyebrow("A difference you noticed", Forest)
-        Text("You marked your latest answer clearer.", style = MaterialTheme.typography.titleMedium)
-        QuietText("Try that same clarity in your next real conversation.")
-    }
-    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        listOf(Symbol.Mic to "Speak", Symbol.Play to "Listen", Symbol.Progress to "Try again").forEach { (icon, label) ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Glyph(icon, Muted, Modifier.size(18.dp)); Text(label, style = MaterialTheme.typography.bodyMedium, color = Muted)
-            }
-        }
-    }
-    goal?.let { QuietText("Your goal · ${it.label}") }
 }
 
 @Composable
-internal fun ProgrammeScreen(controller: PracticeController, onOpen: () -> Unit, onReview: (Int) -> Unit) = Page {
-    Eyebrow("14 small steps")
-    Text("Say it clearly.\nMake it land.", style = MaterialTheme.typography.headlineLarge)
-    QuietText(Programme.goal)
-    ProgressTrack(controller.session.completedDays.size)
-    Programme.outline.forEach { lesson ->
-        if (lesson.day == 1 || lesson.day == 8) {
-            Spacer(Modifier.height(4.dp))
-            Eyebrow(if (lesson.day == 1) "01—07  ·  Speak Clearly" else "08—14  ·  Speak With Conviction")
+private fun ProgrammeProgress(programme: ProgrammeOverview) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("${programme.completedCount} of 14 lessons completed", style = MaterialTheme.typography.bodyMedium, color = Muted)
+        ProgressTrack(programme.completedCount)
+    }
+}
+
+@Composable
+internal fun ProgrammeScreen(onOpen: () -> Unit, onReview: (Int) -> Unit) = Page {
+    val programme = LocalSessionState.current.programme
+    Text("Your programme", Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineLarge)
+    Text(if (programme.isComplete) "Programme complete" else "14 lessons · two phases", style = MaterialTheme.typography.bodyLarge)
+    ProgrammeProgress(programme)
+    ProgrammePhase.entries.forEach { phase ->
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(phase.title, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleLarge, color = Forest)
+            QuietText("Days ${phase.days.first}–${phase.days.last}")
+            QuietText(phase.goal)
         }
-        val complete = lesson.day in controller.session.completedDays
-        val current = !complete && lesson.day == controller.nextDay
-        Surface(color = if (current) Color.White else Color.Transparent, shape = RoundedCornerShape(22.dp)) {
-            Row(Modifier.fillMaxWidth().padding(if (current) 18.dp else 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(38.dp).background(if (complete || current) Sage else Color.White, CircleShape), contentAlignment = Alignment.Center) {
-                    if (complete) Glyph(Symbol.Check, Forest, Modifier.size(19.dp))
-                    else Text(lesson.day.toString().padStart(2, '0'), style = MaterialTheme.typography.labelLarge, color = if (current) Forest else Muted)
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(lesson.title, style = MaterialTheme.typography.titleMedium)
-                QuietText(lesson.outcome)
-                when {
-                    complete -> TextButton(onClick = { onReview(lesson.day) }, contentPadding = PaddingValues(0.dp)) { Text("Review Day ${lesson.day}") }
-                    current -> TextButton(onClick = onOpen, contentPadding = PaddingValues(0.dp)) { Text("Open Day ${lesson.day}"); Spacer(Modifier.width(8.dp)); Glyph(Symbol.Arrow, Forest, Modifier.size(16.dp)) }
-                }
+        programme.lessons.filter { it.metadata.phase == phase }.forEach { lesson ->
+            ProgrammeLessonRow(lesson, onOpen, onReview)
+        }
+    }
+}
+
+@Composable
+private fun ProgrammeLessonRow(lesson: ProgrammeLesson, onOpen: () -> Unit, onReview: (Int) -> Unit) {
+    val current = lesson.status in listOf(LessonStatus.Current, LessonStatus.InProgress)
+    Surface(
+        color = if (current) Sage else Paper,
+        shape = RoundedCornerShape(18.dp),
+        border = if (current) BorderStroke(1.dp, Forest) else null,
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Box(Modifier.size(36.dp).background(if (lesson.status == LessonStatus.Completed) Sage else Paper, CircleShape), contentAlignment = Alignment.Center) {
+                Text(lesson.metadata.day.toString(), style = MaterialTheme.typography.labelLarge, color = Forest)
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(lesson.metadata.title, style = MaterialTheme.typography.titleMedium)
+                Text(when (lesson.status) {
+                    LessonStatus.Completed -> "Day ${lesson.metadata.day} · Completed"
+                    LessonStatus.Current -> "Day ${lesson.metadata.day} · Current lesson"
+                    LessonStatus.InProgress -> "Day ${lesson.metadata.day} · In progress"
+                    LessonStatus.Upcoming -> "Day ${lesson.metadata.day} · Upcoming"
+                }, style = MaterialTheme.typography.bodySmall, color = if (current) Forest else Muted)
+                if (lesson.status != LessonStatus.Upcoming) TextButton(
+                    onClick = { if (lesson.status == LessonStatus.Completed) onReview(lesson.metadata.day) else onOpen() },
+                    modifier = Modifier.heightIn(min = 48.dp), contentPadding = PaddingValues(0.dp),
+                ) {
+                    Text(when (lesson.status) {
+                        LessonStatus.Completed -> "Review Day ${lesson.metadata.day}"
+                        LessonStatus.InProgress -> "Resume Day ${lesson.metadata.day}"
+                        else -> "Start Day ${lesson.metadata.day}"
+                    })
                 }
             }
         }
     }
 }
-

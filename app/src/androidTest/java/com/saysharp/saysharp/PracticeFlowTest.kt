@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.saysharp.shared.platform.AudioRecorder
+import com.saysharp.shared.platform.PracticeAudio
 import com.saysharp.shared.platform.RecordingRef
 import com.saysharp.shared.practice.*
 import com.saysharp.shared.ui.SaySharpApp
@@ -35,49 +35,50 @@ class PracticeFlowTest {
     @Test fun firstLessonCanBeCompletedWithUnsureAndNotYet() {
         val controller = PracticeController(audio, store)
         compose.setContent { SaySharpApp(controller, controller::startRecording) }
-        click("Start practice")
-        click("Record my starting point")
-        compose.onNodeWithText("Keep this baseline").assertDoesNotExist()
-        click("Start recording"); click("Stop and save attempt")
-        click("Keep this baseline")
-        compose.onNodeWithText("A clearer answer").assertDoesNotExist()
+        click("Start today's practice")
         click("Try it myself")
+        compose.onNodeWithText("More effective").assertDoesNotExist()
         click("Start recording"); click("Stop and save attempt")
         click("Listen and check")
-        compose.onNodeWithText("A clearer answer").assertExists()
+        compose.onNodeWithText("More effective").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Play recording · First attempt").performClick()
         click("Unsure")
         compose.onNodeWithText("What to listen for", ignoreCase = true).assertExists()
-        click("Practise the skill again")
+        click("See one useful example")
+        compose.onNodeWithText("More effective").assertExists()
+        click("Try again")
         click("Start recording"); click("Stop and save attempt")
-        click("Compare my attempts"); click("Not yet"); click("About the same")
+        click("Compare my attempts")
+        compose.onNodeWithContentDescription("Play recording · First attempt").assertExists()
+        compose.onNodeWithContentDescription("Play recording · Retry").assertExists()
         click("Try a fresh question")
         click("Start recording"); click("Stop and save attempt")
-        click("Finish my practice"); click("Complete Day 1")
-        click("Hear my progress")
+        click("Finish my practice")
+        click("Finish session")
         compose.onNodeWithText("1 of 14 sessions completed").assertExists()
         compose.runOnIdle {
             assertEquals(PracticeStage.Complete, store.value.stage)
-            assertEquals(4, store.value.recordings.size)
+            assertEquals(3, store.value.recordings.size)
         }
     }
 
     @Test fun permissionDenialLeavesRecordStepRecoverable() {
-        store.value = PracticeSession(stage = PracticeStage.Baseline)
+        store.value = PracticeSession(stage = PracticeStage.FirstAttempt)
         val controller = PracticeController(audio, store)
         compose.setContent { SaySharpApp(controller, controller::permissionDenied) }
-        click("Continue practice"); click("Start recording")
+        click("Resume practice"); click("Start recording")
         compose.onNodeWithText("Microphone permission is needed to record. Try again, or enable it in Android app settings.").assertExists()
         compose.onNodeWithText("Keep this baseline").assertDoesNotExist()
-        compose.runOnIdle { assertEquals(PracticeStage.Baseline, store.value.stage) }
+        compose.runOnIdle { assertEquals(PracticeStage.FirstAttempt, store.value.stage) }
     }
 
     @Test fun startingDayTwoKeepsBaselineAndArchivesDayOne() {
         val baseline = audio.stop()
-        store.value = PracticeSession(stage = PracticeStage.Complete, recordings = mapOf(RecordingSlot.Baseline to baseline), realLifeWin = "First-day win")
+        store.value = PracticeSession(stage = PracticeStage.Complete, recordings = mapOf(RecordingSlot.Baseline to baseline), realLifeWin = "First-day win", completedDays = mapOf(1 to DayReview(realLifeWin = "First-day win")))
         val controller = PracticeController(audio, store)
         compose.setContent { SaySharpApp(controller, controller::startRecording) }
-        click("Start Day 2")
-        compose.onNodeWithText("Give one clear reason").assertExists()
+        click("Start today's practice")
+        compose.onNodeWithText("Give one strong reason").assertExists()
         compose.runOnIdle {
             assertEquals(2, store.value.day)
             assertEquals(baseline, store.value.recordings[RecordingSlot.Baseline])
@@ -85,26 +86,25 @@ class PracticeFlowTest {
         }
     }
 
-    @Test fun checkpointUsesFreshQuestionAndRetrievalBeforeHint() {
+    @Test fun checkpointUsesIndependentFamiliarAndFreshQuestionsBeforeReflection() {
         val baseline = audio.stop()
-        store.value = PracticeSession(day = 7, stage = PracticeStage.CheckpointRepeat, recordings = mapOf(RecordingSlot.Baseline to baseline))
+        store.value = PracticeSession(day = 7, stage = PracticeStage.CheckpointRepeat, recordings = mapOf(RecordingSlot.Baseline to baseline),
+            completedDays = (1..6).associateWith { DayReview() })
         val controller = PracticeController(audio, store)
         compose.setContent { SaySharpApp(controller, controller::startRecording) }
-        click("Continue practice")
+        click("Resume practice")
         compose.onNodeWithText("Change one thing").assertDoesNotExist()
         click("Start recording"); click("Stop and save attempt")
+        compose.onNodeWithContentDescription("Play recording · Saved attempt").assertDoesNotExist()
         click("Answer a fresh question")
         click("Start recording"); click("Stop and save attempt")
-        click("Listen and compare"); click("About the same"); click("Not yet")
-        click("Recall an expression")
-        compose.onNodeWithText("More specifically…").assertDoesNotExist()
-        click("Reveal the expression")
-        compose.onNodeWithText("More specifically…").assertExists()
-        click("Start recording"); click("Stop and save attempt"); click("Unsure")
+        click("Listen and compare")
+        compose.onNodeWithContentDescription("Play recording · Familiar question · Day 7").performClick()
+        compose.onNodeWithContentDescription("Play recording · Fresh question · Day 7").performScrollTo().performClick()
+        click("About the same"); click("Not yet")
         click("Finish checkpoint"); click("Complete Day 7")
         compose.runOnIdle {
             assertEquals(PracticeStage.Complete, store.value.stage)
-            assertEquals(true, store.value.completedDays.getValue(7).recallHintUsed)
             assertEquals(baseline, store.value.recordings[RecordingSlot.Baseline])
         }
     }
@@ -118,7 +118,7 @@ class PracticeFlowTest {
                 Box(Modifier.requiredSize(320.dp, 568.dp)) { SaySharpApp(controller, controller::startRecording) }
             }
         }
-        click("Continue practice")
+        click("Resume practice")
         compose.onNodeWithText("Start recording").assertIsDisplayed().performClick()
         compose.onNodeWithText("Stop and save attempt").assertIsDisplayed().performClick()
         compose.onNodeWithText("Listen and check").assertIsDisplayed().assertIsEnabled().performClick()
@@ -132,7 +132,7 @@ private class TestStore : SessionStore {
     override fun save(session: PracticeSession) { value = session }
 }
 
-private class TestAudio : AudioRecorder {
+private class TestAudio : PracticeAudio {
     private var sequence = 0
     private val records = mutableSetOf<RecordingRef>()
     override fun start(limitMillis: Long, onLimit: () -> Unit, onError: () -> Unit) {}

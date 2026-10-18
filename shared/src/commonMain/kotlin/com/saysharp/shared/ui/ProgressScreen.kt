@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.saysharp.shared.lesson.Programme
+import com.saysharp.shared.session.BundledSessionRepository
 import com.saysharp.shared.practice.*
 import com.saysharp.shared.engagement.*
 
@@ -23,11 +23,13 @@ internal fun ProgressScreen(controller: PracticeController, requestedDay: Int?, 
     var confirmDelete by remember { mutableStateOf(false) }
     var showMilestones by rememberSaveable { mutableStateOf(false) }
     var showWin by rememberSaveable { mutableStateOf(false) }
-    val session = controller.session
+    val state = LocalSessionState.current
+    val session = state.progress
     val availableDays = (session.completedDays.keys + session.day).sorted()
     val day = requestedDay?.takeIf { it in availableDays } ?: session.day
     val review = session.completedDays[day] ?: session.review()
-    val checkpoint = Programme.checkpoint(day)
+    val definition = BundledSessionRepository.definition(day)
+    val checkpoint = definition.checkpoint
     if (showMilestones) AlertDialog(
         onDismissRequest = { showMilestones = false },
         title = { Text("Every step counts.", style = MaterialTheme.typography.headlineMedium) },
@@ -76,7 +78,7 @@ internal fun ProgressScreen(controller: PracticeController, requestedDay: Int?, 
                 colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Forest, selectedLabelColor = Color.White)) }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Programme.outline[day - 1].title, style = MaterialTheme.typography.headlineMedium)
+            Text(definition.title, style = MaterialTheme.typography.headlineMedium)
             Eyebrow(if (day in session.completedDays) "Day $day · Completed" else "Day $day · In progress", Forest)
         }
         if (review.recordings.isEmpty()) QuietText("Your practice attempts will appear here.")
@@ -95,12 +97,12 @@ internal fun ProgressScreen(controller: PracticeController, requestedDay: Int?, 
             }
         }
         if (review.firstAssessment != null || review.retryAssessment != null) {
-            val question = if (checkpoint != null) "On the fresh question, did your first sentence answer the question?" else Programme.lesson(day).selfCheck
+            val question = definition.selfCheck
             Panel(color = Sage) {
                 Eyebrow("Your reflections", Forest)
                 Text(question, style = MaterialTheme.typography.titleMedium)
                 if (checkpoint == null) ReflectionRow("First attempt", review.firstAssessment?.let(::assessmentLabel) ?: "Not checked")
-                ReflectionRow(if (checkpoint == null) "Retry" else "Fresh question", review.retryAssessment?.let(::assessmentLabel) ?: "Not checked")
+                if (checkpoint != null || review.retryAssessment != null) ReflectionRow(if (checkpoint == null) "Retry" else "Fresh question", review.retryAssessment?.let(::assessmentLabel) ?: "Not checked")
                 review.comparison?.let { HorizontalDivider(color = Line); ReflectionRow(if (checkpoint != null) "Compared with baseline" else "Compared with first", comparisonLabel(it)) }
                 QuietText("Your own assessment, not an objective score.")
             }

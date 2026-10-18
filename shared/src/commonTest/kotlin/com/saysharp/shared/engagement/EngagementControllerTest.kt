@@ -6,14 +6,14 @@ class EngagementControllerTest {
     @Test fun welcomeAndGoalPersistAcrossRestart() {
         val store = MemoryEngagement()
         val controller = EngagementController(store)
-        assertFalse(controller.state.welcomed)
+        assertFalse(controller.state.onboardingCompleted)
         assertTrue(controller.finishWelcome(SpeakingGoal.Meetings))
         assertEquals(controller.state, EngagementController(store).state)
         assertEquals(SpeakingGoal.Meetings, store.state.goal)
     }
 
     @Test fun historicalMilestonesCollapseIntoOneCelebrationAndDoNotReplay() {
-        val store = MemoryEngagement(EngagementState(welcomed = true))
+        val store = MemoryEngagement(EngagementState(onboardingCompleted = true))
         val controller = EngagementController(store)
         val milestone = assertNotNull(controller.pendingMilestone((1..7).toSet()))
         assertEquals(7, milestone.sessions)
@@ -24,7 +24,7 @@ class EngagementControllerTest {
     }
 
     @Test fun incompleteAndNonConsecutiveHistoryCannotEarnLaterMilestone() {
-        val controller = EngagementController(MemoryEngagement(EngagementState(welcomed = true)))
+        val controller = EngagementController(MemoryEngagement(EngagementState(onboardingCompleted = true)))
         assertNull(controller.pendingMilestone(setOf(7, 14)))
         assertEquals(1, controller.pendingMilestone(setOf(1, 3, 4, 5, 6, 7))?.sessions)
         assertNull(EngagementController(MemoryEngagement()).pendingMilestone((1..14).toSet()))
@@ -34,7 +34,7 @@ class EngagementControllerTest {
         val store = MemoryEngagement().apply { failSave = true }
         val controller = EngagementController(store)
         assertFalse(controller.finishWelcome(SpeakingGoal.Discussions))
-        assertFalse(controller.state.welcomed)
+        assertFalse(controller.state.onboardingCompleted)
         store.failSave = false
         controller.finishWelcome(SpeakingGoal.Everyday)
         store.failSave = true
@@ -52,10 +52,10 @@ class EngagementControllerTest {
     @Test fun unreadablePreferencesDoNotBlockPracticeOrGetOverwritten() {
         val store = MemoryEngagement().apply { failLoad = true }
         val controller = EngagementController(store)
-        assertTrue(controller.state.welcomed)
+        assertTrue(controller.state.onboardingCompleted)
         assertFalse(controller.changeGoal(SpeakingGoal.Meetings))
         assertNull(controller.pendingMilestone((1..14).toSet()))
-        assertFalse(store.state.welcomed)
+        assertFalse(store.state.onboardingCompleted)
     }
 }
 

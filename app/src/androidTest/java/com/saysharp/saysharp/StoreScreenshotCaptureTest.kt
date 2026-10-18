@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.saysharp.shared.platform.*
 import com.saysharp.shared.practice.*
-import com.saysharp.shared.lesson.Programme
+import com.saysharp.shared.session.BundledSessionRepository
 import com.saysharp.shared.reminder.*
 import com.saysharp.shared.ui.SaySharpApp
 import java.io.File
@@ -74,24 +74,24 @@ class StoreScreenshotCaptureTest {
     @Test fun programme() {
         show()
         compose.onNodeWithText("Programme").performClick()
-        alignContent("01—07  ·  Build your foundation")
+        alignContent("Speak Clearly")
         capture("02-programme")
     }
     @Test fun lesson() {
         show(PracticeSession(stage = PracticeStage.Lesson))
-        compose.onNodeWithText("Continue practice").performClick()
-        alignContent(Programme.firstLesson.instruction)
+        compose.onNodeWithText("Resume practice").performClick()
+        alignContent("Put the point first")
         capture("03-lesson")
     }
     @Test fun compare() {
         show(PracticeSession(stage = PracticeStage.Compare, recordings = audio.examples()))
-        compose.onNodeWithText("Continue practice").performClick()
+        compose.onNodeWithText("Resume practice").performClick()
         capture("04-compare")
     }
     @Test fun disagreement() {
-        show(PracticeSession(day = 9, stage = PracticeStage.Lesson))
-        compose.onNodeWithText("Continue practice").performClick()
-        alignContent(Programme.lesson(9).instruction)
+        show(PracticeSession(day = 9, stage = PracticeStage.Welcome))
+        compose.onNodeWithText("Start today's practice").performClick()
+        alignContent(BundledSessionRepository.definition(9).instruction)
         capture("05-disagreement")
     }
     @Test fun progress() {
@@ -102,7 +102,7 @@ class StoreScreenshotCaptureTest {
     }
 }
 
-private class StoreDemoAudio : AudioRecorder {
+private class StoreDemoAudio : PracticeAudio {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val directory = File(instrumentation.targetContext.cacheDir, "store-demo-audio").apply { mkdirs() }
     fun examples(): Map<RecordingSlot, RecordingRef> = listOf(

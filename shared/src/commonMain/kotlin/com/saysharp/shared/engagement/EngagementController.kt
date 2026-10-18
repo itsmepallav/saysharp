@@ -12,7 +12,7 @@ enum class SpeakingGoal(val label: String, val outcome: String) {
 }
 
 data class EngagementState(
-    val welcomed: Boolean = false,
+    val onboardingCompleted: Boolean = false,
     val goal: SpeakingGoal = SpeakingGoal.Everyday,
     val acknowledged: Set<Int> = emptySet(),
 )
@@ -40,13 +40,13 @@ class EngagementController(private val store: EngagementStore, private val telem
         telemetry.error("welcome_restore", error)
         readable = false
         message = "Your welcome preferences could not be opened. Your practice is still available."
-        EngagementState(welcomed = true)
+        EngagementState(onboardingCompleted = true)
     })
         private set
 
-    fun finishWelcome(goal: SpeakingGoal, skipped: Boolean = false): Boolean {
-        val firstTime = !state.welcomed
-        val saved = update(state.copy(welcomed = true, goal = goal))
+    fun finishWelcome(goal: SpeakingGoal = state.goal, skipped: Boolean = false): Boolean {
+        val firstTime = !state.onboardingCompleted
+        val saved = update(state.copy(onboardingCompleted = true, goal = goal))
         if (saved) telemetry.track(if (firstTime) "tutorial_complete" else "welcome_replayed",
             "goal" to goal.name, "skipped" to skipped)
         return saved
@@ -60,7 +60,7 @@ class EngagementController(private val store: EngagementStore, private val telem
     }
 
     fun pendingMilestone(completedDays: Set<Int>): Milestone? {
-        if (!readable || !state.welcomed) return null
+        if (!readable || !state.onboardingCompleted) return null
         return Milestones.lastOrNull { milestone ->
             milestone.sessions !in state.acknowledged && (1..milestone.sessions).all { it in completedDays }
         }

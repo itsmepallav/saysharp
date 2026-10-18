@@ -11,6 +11,7 @@ import com.saysharp.shared.practice.SessionStore
 import com.saysharp.shared.practice.DayReview
 import com.saysharp.shared.practice.review
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.File
 
 class AndroidSessionStore(directory: File) : SessionStore {
@@ -35,6 +36,10 @@ class AndroidSessionStore(directory: File) : SessionStore {
             comparison = review.comparison, realLifeWin = review.realLifeWin,
             vocabularyAssessment = review.vocabularyAssessment, recallAssessment = review.recallAssessment,
             recallHintUsed = review.recallHintUsed,
+            recordingInProgress = json.optBoolean("recordingInProgress"),
+            listenedRecordingIds = json.optJSONArray("listenedRecordingIds")?.let { array ->
+                (0 until array.length()).map { array.getString(it) }.toSet()
+            } ?: emptySet(),
             completedDays = history.keys().asSequence().associate { key ->
                 val historyDay = key.toInt().also { require(it in 1..14) }
                 historyDay to readReview(history.getJSONObject(key))
@@ -82,6 +87,8 @@ class AndroidSessionStore(directory: File) : SessionStore {
         val json = writeReview(session.review().copy(recordings = session.recordings))
             .put("version", 2).put("stage", session.stage.name).put("day", session.day)
             .put("completedDays", history)
+            .put("recordingInProgress", session.recordingInProgress)
+            .put("listenedRecordingIds", JSONArray(session.listenedRecordingIds.toList()))
         val stream = file.startWrite()
         try {
             stream.write(json.toString().toByteArray(Charsets.UTF_8))

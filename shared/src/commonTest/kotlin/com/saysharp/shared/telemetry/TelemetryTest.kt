@@ -4,6 +4,7 @@ import com.saysharp.shared.engagement.*
 import com.saysharp.shared.platform.*
 import com.saysharp.shared.practice.*
 import kotlin.test.*
+import com.saysharp.shared.session.withRequiredExercise
 
 class TelemetryTest {
     private val sink = CapturingBackend()
@@ -12,22 +13,22 @@ class TelemetryTest {
     private val audio = TrackingAudio()
 
     @Test fun completedChapterIsReportedOnceOnlyAfterPersistence() {
-        store.session = PracticeSession(stage = PracticeStage.Summary)
+        store.session = PracticeSession(day = 2, stage = PracticeStage.Apply, recordings = mapOf(RecordingSlot.Application to RecordingRef("transfer", 35000)), completedDays = mapOf(1 to DayReview())).withRequiredExercise()
         val controller = PracticeController(audio, store, telemetry)
         assertTrue(sink.events.isEmpty())
         controller.advance()
         controller.advance()
         PracticeController(audio, store, telemetry) // Restoring completed history isn't a new completion.
         assertEquals(1, sink.events.count { it.first == "chapter_completed" })
-        assertEquals(1, sink.events.first { it.first == "chapter_completed" }.second["day"])
+        assertEquals(2, sink.events.first { it.first == "chapter_completed" }.second["day"])
     }
 
     @Test fun failedSaveReportsErrorWithoutReportingCompletion() {
-        store.session = PracticeSession(stage = PracticeStage.Summary)
+        store.session = PracticeSession(day = 2, stage = PracticeStage.Apply, recordings = mapOf(RecordingSlot.Application to RecordingRef("transfer", 35000)), completedDays = mapOf(1 to DayReview())).withRequiredExercise()
         store.failSave = true
         val controller = PracticeController(audio, store, telemetry)
         controller.advance()
-        assertEquals(PracticeStage.Summary, controller.session.stage)
+        assertEquals(PracticeStage.Apply, controller.session.stage)
         assertTrue(sink.events.none { it.first in listOf("chapter_completed", "practice_step_completed") })
         assertEquals(listOf("practice_save"), sink.errors)
     }
@@ -37,8 +38,9 @@ class TelemetryTest {
         val controller = PracticeController(audio, store, telemetry)
         controller.startRecording(); controller.stopRecording()
         val original = controller.baseline()
+        controller.startRecording()
         store.failSave = true
-        controller.startRecording(); controller.stopRecording()
+        controller.stopRecording()
         assertEquals(original, controller.baseline())
         assertEquals(1, sink.events.count { it.first == "recording_saved" })
         val starts = sink.events.filter { it.first == "recording_started" }
@@ -67,7 +69,7 @@ class TelemetryTest {
         })
         broken.error("test")
         broken.screen("today")
-        store.session = PracticeSession(stage = PracticeStage.Summary)
+        store.session = PracticeSession(day = 2, stage = PracticeStage.Apply, recordings = mapOf(RecordingSlot.Application to RecordingRef("transfer", 35000)), completedDays = mapOf(1 to DayReview())).withRequiredExercise()
         val controller = PracticeController(audio, store, broken)
         controller.advance()
         assertEquals(PracticeStage.Complete, store.session.stage)
@@ -107,7 +109,7 @@ private class TrackingSessionStore : SessionStore {
     override fun save(session: PracticeSession) { check(!failSave); this.session = session }
 }
 
-private class TrackingAudio : AudioRecorder {
+private class TrackingAudio : PracticeAudio {
     var sequence = 0
     override fun start(limitMillis: Long, onLimit: () -> Unit, onError: () -> Unit) {}
     override fun stop() = RecordingRef("private-recording-${sequence++}", 2_000)

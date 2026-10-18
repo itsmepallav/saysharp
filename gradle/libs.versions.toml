@@ -15,6 +15,7 @@ crashlyticsPlugin = "3.0.8"
 fragment = "1.9.1"
 
 [libraries]
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "fragment" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }

@@ -36,6 +36,7 @@ dependencies {
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.crashlytics)
     implementation(project(":shared"))
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     testImplementation(libs.junit)
